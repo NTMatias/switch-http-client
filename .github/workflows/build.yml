@@ -1,0 +1,26 @@
+name: Build Switch NRO
+
+on: [push, pull_request]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container: devkitpro/devkita64:latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          dcpman install switch-dev switch-curl switch-mbedtls switch-zlib switch-libnx
+
+      - name: Build NRO
+        run: |
+          make
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: switch-http-client-nro
+          path: switch-http-client.nro
