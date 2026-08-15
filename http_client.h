@@ -1,28 +1,39 @@
-#pragma once
+#ifndef HTTP_CLIENT_H
+#define HTTP_CLIENT_H
+
 #include <stddef.h>
+#include <stdbool.h>
 
-// Tamaño del buffer de fragmento en memoria (RAM) antes de volcar a la SD.
-// 64 KB es un valor seguro: suficientemente grande para rendimiento,
-// suficientemente pequeño para no impactar la RAM de la consola.
-#define HTTP_CHUNK_BUFFER_SIZE (64 * 1024)
+// Definiciones de tamaños recomendados para evitar desbordamientos de memoria
+#define MAX_URL_LENGTH 512
+#define MAX_RESPONSE_BUFFER 4096
 
-// Códigos de resultado de la descarga
-typedef enum {
-    HTTP_DOWNLOAD_OK = 0,
-    HTTP_DOWNLOAD_ERR_CURL_INIT,
-    HTTP_DOWNLOAD_ERR_FOPEN,
-    HTTP_DOWNLOAD_ERR_REQUEST,
-    HTTP_DOWNLOAD_ERR_HTTP_STATUS,
-    HTTP_DOWNLOAD_ERR_WRITE_SD
-} HttpDownloadResult;
+#ifdef __cplusplus
+extern "C" {
+#endif
 
-// Inicializa sockets + curl global. Llamar una vez al arrancar la app.
-int http_client_init(void);
+/**
+ * Realiza una petición HTTP GET a la URL especificada.
+ * Guarda la respuesta (texto/JSON) dentro del buffer proporcionado.
+ * 
+ * @param url La dirección web a consultar (HTTPS).
+ * @param buffer El arreglo de caracteres donde se guardará la respuesta.
+ * @param max_len El tamaño máximo del buffer.
+ * @return 0 si la petición fue exitosa, -1 si ocurrió un error.
+ */
+int http_get_string(const char *url, char *buffer, size_t max_len);
 
-// Libera curl global + sockets. Llamar al salir de la app.
-void http_client_exit(void);
+/**
+ * Descarga un archivo binario desde una URL y lo guarda en la SD.
+ * 
+ * @param url La dirección web del archivo a descargar.
+ * @param filepath La ruta local donde se guardará (ej. "sdmc:/switch/archivo.zip").
+ * @return 0 si la descarga fue exitosa, -1 si ocurrió un error.
+ */
+int http_download_file(const char *url, const char *filepath);
 
-// Descarga 'url' a 'destPath' (ruta en sdmc:/...) usando streaming
-// por fragmentos con buffer controlado en RAM.
-// Devuelve HTTP_DOWNLOAD_OK si todo fue bien.
-HttpDownloadResult http_download_file(const char* url, const char* destPath);
+#ifdef __cplusplus
+}
+#endif
+
+#endif // HTTP_CLIENT_H
