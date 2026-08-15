@@ -5,13 +5,11 @@
 #include <curl/curl.h>
 #include "http_client.h"
 
-// Estructura para almacenar la respuesta de texto en memoria dinámica
 struct MemoryStruct {
     char *memory;
     size_t size;
 };
 
-// Callback para guardar los datos en memoria (textos, JSON)
 static size_t WriteMemoryCallback(void *contents, size_t size, size_t nmemb, void *userp) {
     size_t realsize = size * nmemb;
     struct MemoryStruct *mem = (struct MemoryStruct *)userp;
@@ -30,7 +28,6 @@ static size_t WriteMemoryCallback(void *contents, size_t size, size_t nmemb, voi
     return realsize;
 }
 
-// Callback para guardar archivos directamente en la SD
 static size_t WriteFileCallback(void *ptr, size_t size, size_t nmemb, void *stream) {
     return fwrite(ptr, size, nmemb, (FILE *)stream);
 }
@@ -56,12 +53,11 @@ int http_get_string(const char *url, char *buffer, size_t max_len) {
     curl_easy_setopt(curl_handle, CURLOPT_WRITEDATA, (void *)&chunk);
     curl_easy_setopt(curl_handle, CURLOPT_USERAGENT, "SwitchHomebrewClient/1.0");
     
-    // Configuración obligatoria para HTTPS seguro usando RomFS
     curl_easy_setopt(curl_handle, CURLOPT_CAINFO, "romfs:/cacert.pem");
     curl_easy_setopt(curl_handle, CURLOPT_SSL_VERIFYPEER, 1L);
     curl_easy_setopt(curl_handle, CURLOPT_SSL_VERIFYHOST, 2L);
     
-    curl_easy_setopt(curl_handle, CURLOPT_TIMEOUT, 15L); // 15 segundos de timeout
+    curl_easy_setopt(curl_handle, CURLOPT_TIMEOUT, 15L);
 
     res = curl_easy_perform(curl_handle);
 
@@ -72,7 +68,6 @@ int http_get_string(const char *url, char *buffer, size_t max_len) {
         return -1;
     }
 
-    // Copiar el resultado al buffer de forma segura
     snprintf(buffer, max_len, "%s", chunk.memory);
 
     free(chunk.memory);
@@ -99,14 +94,16 @@ int http_download_file(const char *url, const char *filepath) {
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteFileCallback);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, fp);
     
-    // Configuración HTTPS
     curl_easy_setopt(curl, CURLOPT_CAINFO, "romfs:/cacert.pem");
     curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L);
     curl_easy_setopt(curl, CURLOPT_USERAGENT, "SwitchHomebrewClient/1.0");
 
-    res = curl_easy_perform(curl, &fp);
+    // SOLUCIÓN: Solo se pasa un argumento a curl_easy_perform
+    res = curl_easy_perform(curl); 
+    
     fclose(fp);
     curl_easy_cleanup(curl);
 
     return (res == CURLE_OK) ? 0 : -1;
+}
 }
