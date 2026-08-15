@@ -18,9 +18,9 @@ include $(DEVKITPRO)/libnx/switch_rules
 # espere "switch-http-client.nro".
 TARGET      :=  switch-http-client
 BUILD       :=  build
-SOURCES     :=  source
+SOURCES     :=  .
 DATA        :=  data
-INCLUDES    :=  source
+INCLUDES    :=  .
 ROMFS       :=  romfs
 
 APP_TITLE   :=  Cliente HTTP Homebrew
