@@ -4,7 +4,6 @@
 #include <switch.h>
 #include "http_client.h"
 
-// Función para invocar el teclado nativo
 bool abrir_teclado_virtual(char *out_str, size_t max_len, const char *initial_text) {
     SwkbdConfig kbd;
     Result rc = swkbdCreate(&kbd, 0);
@@ -24,32 +23,36 @@ bool abrir_teclado_virtual(char *out_str, size_t max_len, const char *initial_te
 }
 
 int main(int argc, char **argv) {
-    gfxInitDefault();
+    // Nueva forma de iniciar la consola de texto en libnx
     consoleInit(NULL);
 
-    // Cargar romfs para el cacert.pem
+    // Nueva forma de inicializar los controles en libnx
+    PadState pad;
+    padConfigureInput(1, HidNpadStyleSet_NpadStandard);
+    padInitializeDefault(&pad);
+
     Result romfs_res = romfsInit();
 
     char query_buffer[256] = "";
-    char status_message[MAX_RESPONSE_BUFFER] = "Presiona [X] para buscar.\nPresiona [A] para prueba de descarga.";
+    char status_message[MAX_RESPONSE_BUFFER] = "Presiona [X] para buscar.\nPresiona [+] para salir.";
     
     while (appletMainLoop()) {
-        hidScanInput();
-        u64 kDown = hidKeysDown(CONTROLLER_P1_AUTO);
+        // Nueva forma de leer los controles
+        padUpdate(&pad);
+        u64 kDown = padGetButtonsDown(&pad);
 
-        if (kDown & KEY_PLUS) break;
+        // Los botones ahora usan el prefijo HidNpadButton_
+        if (kDown & HidNpadButton_Plus) break;
 
-        // Buscar con teclado virtual
-        if (kDown & KEY_X) {
+        if (kDown & HidNpadButton_X) {
             if (abrir_teclado_virtual(query_buffer, sizeof(query_buffer), "")) {
                 if (strlen(query_buffer) > 0) {
                     snprintf(status_message, sizeof(status_message), "Buscando: '%s'...", query_buffer);
                     
-                    // URL de ejemplo. Aquí conectas tu API real luego.
                     char url[MAX_URL_LENGTH];
                     snprintf(url, sizeof(url), "https://httpbin.org/get?busqueda=%s", query_buffer);
 
-                    char response_buffer[2048]; // Usamos un buffer local para la respuesta HTTP
+                    char response_buffer[2048] = {0}; 
                     
                     if (http_get_string(url, response_buffer, sizeof(response_buffer)) == 0) {
                         snprintf(status_message, sizeof(status_message), "Exito! Respuesta JSON obtenida:\n%.500s...", response_buffer);
@@ -60,7 +63,6 @@ int main(int argc, char **argv) {
             }
         }
 
-        // Dibujar interfaz
         consoleClear();
         printf("===================================================\n");
         printf("       CLIENTE HOMEBREW - BUSCADOR INTERACTIVO     \n");
@@ -81,12 +83,11 @@ int main(int argc, char **argv) {
         printf(" [+] Salir de la app\n");
         printf("===================================================\n");
 
-        gfxFlushBuffers();
-        gfxSwapBuffers();
-        gputickWaitForVsync();
+        // Nueva forma de refrescar la pantalla en la API reciente
+        consoleUpdate(NULL);
     }
 
     if (R_SUCCEEDED(romfs_res)) romfsExit();
-    gfxExit();
+    consoleExit(NULL);
     return 0;
 }
