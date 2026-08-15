@@ -11,11 +11,6 @@ jobs:
   build:
     runs-on: ubuntu-latest
 
-    # Usamos la imagen Docker oficial de devkitPro para Switch (devkitA64).
-    # Esta imagen ya trae DEVKITPRO, DEVKITA64, DEVKITARM y DEVKITPPC
-    # definidas como variables de entorno reales del contenedor, por lo
-    # que cada "step" las hereda automáticamente sin necesidad de exportarlas
-    # ni de hacer "source" de ningún script.
     container:
       image: devkitpro/devkita64:latest
 
@@ -29,20 +24,10 @@ jobs:
           echo "DEVKITA64=$DEVKITA64"
           echo "PATH=$PATH"
 
-      - name: Instalar dependencias de Switch (libcurl, mbedtls, zlib)
-        # switch-curl, switch-mbedtls y switch-zlib son "portlibs":
-        # no vienen preinstalados en la imagen base, hay que traerlos
-        # explícitamente con dkp-pacman antes de compilar.
-        run: |
-          dkp-pacman -Sy --noconfirm
-          dkp-pacman -S --noconfirm switch-curl switch-mbedtls switch-zlib
-
-      - name: Preparar carpeta romfs (evita fallo si está vacía o no existe)
+      - name: Preparar carpeta romfs
         run: mkdir -p romfs
 
       - name: Descargar cacert.pem si no está versionado en el repo
-        # Así el .nro generado ya trae verificación TLS funcional
-        # aunque no se haya comprometido el cacert.pem al repositorio.
         run: |
           if [ ! -f romfs/cacert.pem ]; then
             curl -fsSL -o romfs/cacert.pem https://curl.se/ca/cacert.pem
