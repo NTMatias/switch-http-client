@@ -1,126 +1,64 @@
-#---------------------------------------------------------------------------------
-# Verifica que DEVKITPRO esté definido en el entorno
-#---------------------------------------------------------------------------------
-ifeq ($(strip $(DEVKITPRO)),)
-$(error "Please set DEVKITPRO in your environment. export DEVKITPRO=<path to>/devkitpro")
-endif
+name: Build Switch Homebrew (.nro)
 
-TOPDIR ?= $(CURDIR)
-include $(DEVKITPRO)/libnx/switch_rules
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch:
 
-#---------------------------------------------------------------------------------
-# Opciones generales de la app
-#---------------------------------------------------------------------------------
-# Fijamos el nombre explícitamente en vez de derivarlo de $(notdir $(CURDIR)).
-# Si se deriva del nombre de carpeta, el .nro cambia de nombre según cómo
-# se llame el checkout (p. ej. en GitHub Actions, donde la carpeta toma el
-# nombre exacto del repositorio), rompiendo cualquier paso de CI que
-# espere "switch-http-client.nro".
-TARGET      :=  switch-http-client
-BUILD       :=  build
-SOURCES     :=  source
-DATA        :=  data
-INCLUDES    :=  source
-ROMFS       :=  romfs
+jobs:
+  build:
+    runs-on: ubuntu-latest
 
-APP_TITLE   :=  Cliente HTTP Homebrew
-APP_AUTHOR  :=  TuNombre
-APP_VERSION :=  1.0.0
-# APP_ICON  :=  icon.jpg   # descomenta si añades un icono de 256x256
+    # Usamos la imagen Docker oficial de devkitPro para Switch (devkitA64).
+    # Esta imagen ya trae DEVKITPRO, DEVKITA64, DEVKITARM y DEVKITPPC
+    # definidas como variables de entorno reales del contenedor, por lo
+    # que cada "step" las hereda automáticamente sin necesidad de exportarlas
+    # ni de hacer "source" de ningún script.
+    container:
+      image: devkitpro/devkita64:latest
 
-#---------------------------------------------------------------------------------
-# Arquitectura (Nintendo Switch - Cortex-A57)
-#---------------------------------------------------------------------------------
-ARCH    :=  -march=armv8-a -mtune=cortex-a57 -mtp=soft -fPIE
+    steps:
+      - name: Checkout del repositorio
+        uses: actions/checkout@v4
 
-#---------------------------------------------------------------------------------
-# Flags de compilación
-#---------------------------------------------------------------------------------
-CFLAGS  :=  -g -Wall -O2 -ffunction-sections \
-            $(ARCH) $(BUILD_CFLAGS) \
-            -D__SWITCH__
+      - name: Mostrar variables de entorno de devkitPro (diagnóstico)
+        run: |
+          echo "DEVKITPRO=$DEVKITPRO"
+          echo "DEVKITA64=$DEVKITA64"
+          echo "PATH=$PATH"
 
-CFLAGS  +=  $(INCLUDE)
+      - name: Instalar dependencias de Switch (libcurl, mbedtls, zlib)
+        # switch-curl, switch-mbedtls y switch-zlib son "portlibs":
+        # no vienen preinstalados en la imagen base, hay que traerlos
+        # explícitamente con dkp-pacman antes de compilar.
+        run: |
+          dkp-pacman -Sy --noconfirm
+          dkp-pacman -S --noconfirm switch-curl switch-mbedtls switch-zlib
 
-CXXFLAGS := $(CFLAGS) -fno-rtti -fno-exceptions -std=gnu++17
+      - name: Preparar carpeta romfs (evita fallo si está vacía o no existe)
+        run: mkdir -p romfs
 
-ASFLAGS :=  -g $(ARCH)
-LDFLAGS  =  -specs=$(DEVKITPRO)/libnx/switch.specs -g $(ARCH) -Wl,-Map,$(notdir $*.map)
+      - name: Descargar cacert.pem si no está versionado en el repo
+        # Así el .nro generado ya trae verificación TLS funcional
+        # aunque no se haya comprometido el cacert.pem al repositorio.
+        run: |
+          if [ ! -f romfs/cacert.pem ]; then
+            curl -fsSL -o romfs/cacert.pem https://curl.se/ca/cacert.pem
+          fi
 
-#---------------------------------------------------------------------------------
-# Librerías: libcurl (HTTP/HTTPS), mbedtls (TLS), z (compresión), nx (libnx)
-# El orden de enlazado importa: curl depende de mbedtls y de z.
-#---------------------------------------------------------------------------------
-LIBS    :=  -lcurl -lmbedtls -lmbedx509 -lmbedcrypto -lz -lnx
+      - name: Compilar con make
+        run: make -j$(nproc)
 
-#---------------------------------------------------------------------------------
-# Rutas de librerías: portlibs (curl/mbedtls/zlib) + libnx
-#---------------------------------------------------------------------------------
-LIBDIRS :=  $(PORTLIBS) $(LIBNX)
+      - name: Verificar que el .nro se generó correctamente
+        run: |
+          ls -la
+          test -f switch-http-client.nro
 
-#---------------------------------------------------------------------------------
-# No tocar a partir de aquí (reglas estándar de devkitPro)
-#---------------------------------------------------------------------------------
-ifneq ($(BUILD),$(notdir $(CURDIR)))
-
-export OUTPUT   :=  $(CURDIR)/$(TARGET)
-export TOPDIR   :=  $(CURDIR)
-
-export VPATH    :=  $(foreach dir,$(SOURCES),$(CURDIR)/$(dir)) \
-                     $(foreach dir,$(DATA),$(CURDIR)/$(dir))
-
-export DEPSDIR  :=  $(CURDIR)/$(BUILD)
-
-CFILES      :=  $(foreach dir,$(SOURCES),$(notdir $(wildcard $(dir)/*.c)))
-CPPFILES    :=  $(foreach dir,$(SOURCES),$(notdir $(wildcard $(dir)/*.cpp)))
-SFILES      :=  $(foreach dir,$(SOURCES),$(notdir $(wildcard $(dir)/*.s)))
-BINFILES    :=  $(foreach dir,$(DATA),$(notdir $(wildcard $(dir)/*.*)))
-
-ifeq ($(strip $(CPPFILES)),)
-    export LD   :=  $(CC)
-else
-    export LD   :=  $(CXX)
-endif
-
-export OFILES_BIN   :=  $(addsuffix .o,$(BINFILES))
-export OFILES_SRC    :=  $(CPPFILES:.cpp=.o) $(CFILES:.c=.o) $(SFILES:.s=.o)
-export OFILES        :=  $(OFILES_BIN) $(OFILES_SRC)
-export HFILES_BIN    :=  $(addsuffix .h,$(subst .,_,$(BINFILES)))
-
-export INCLUDE  :=  $(foreach dir,$(INCLUDES),-I$(CURDIR)/$(dir)) \
-                     $(foreach dir,$(LIBDIRS),-I$(dir)/include) \
-                     -I$(CURDIR)/$(BUILD)
-
-export LIBPATHS :=  $(foreach dir,$(LIBDIRS),-L$(dir)/lib)
-
-ifeq ($(strip $(ROMFS)),)
-else
-    export ROMFS_ARG := --romfsdir=$(CURDIR)/$(ROMFS)
-endif
-
-.PHONY: $(BUILD) clean all
-
-all: $(BUILD)
-
-$(BUILD):
-	@[ -d $@ ] || mkdir -p $@
-	@$(MAKE) --no-print-directory -C $(BUILD) -f $(CURDIR)/Makefile
-
-clean:
-	@echo clean ...
-	@rm -fr $(BUILD) $(TARGET).pfs0 $(TARGET).nso $(TARGET).nro $(TARGET).nacp $(TARGET).elf
-
-else
-
-DEPENDS :=  $(OFILES:.o=.d)
-
-all: $(OUTPUT).nro
-
-$(OUTPUT).nro: $(OUTPUT).elf $(OUTPUT).nacp
-$(OUTPUT).elf: $(OFILES)
-
-$(OFILES_SRC): $(HFILES_BIN)
-
--include $(DEPENDS)
-
-endif
+      - name: Subir el .nro como artefacto descargable
+        uses: actions/upload-artifact@v4
+        with:
+          name: switch-http-client-nro
+          path: switch-http-client.nro
+          if-no-files-found: error
