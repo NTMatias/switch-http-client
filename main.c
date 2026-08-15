@@ -1,111 +1,92 @@
-// ============================================================================
-// Cliente HTTP homebrew para Nintendo Switch (libnx + devkitPro)
-// Descarga archivos por streaming/fragmentos desde un servidor propio y
-// los guarda en la tarjeta microSD, con UI de consola de texto.
-// ============================================================================
-
-#include <switch.h>
+#include <string.h>
 #include <stdio.h>
-#include <sys/stat.h>
+#include <stdlib.h>
+#include <switch.h>
 #include "http_client.h"
 
-// Ajusta estos valores a tu servidor/API propia
-#define DOWNLOAD_URL   "https://tu-servidor-privado.local/archivo.bin"
-#define DOWNLOAD_DIR   "sdmc:/switch/http-client-downloads"
-#define DOWNLOAD_PATH  DOWNLOAD_DIR "/archivo.bin"
+// Función para invocar el teclado nativo
+bool abrir_teclado_virtual(char *out_str, size_t max_len, const char *initial_text) {
+    SwkbdConfig kbd;
+    Result rc = swkbdCreate(&kbd, 0);
+    if (R_FAILED(rc)) return false;
 
-// Crea la carpeta de destino en la SD si no existe todavía.
-static void ensure_download_dir(void)
-{
-    mkdir(DOWNLOAD_DIR, 0777); // si ya existe, mkdir falla silenciosamente (ignorado)
+    swkbdConfigMakePresetDefault(&kbd);
+    swkbdConfigSetGuideText(&kbd, "Escribe el nombre a buscar:");
+    
+    if (initial_text && initial_text[0] != '\0') {
+        swkbdConfigSetInitialText(&kbd, initial_text);
+    }
+
+    rc = swkbdShow(&kbd, out_str, max_len);
+    swkbdClose(&kbd);
+
+    return R_SUCCEEDED(rc);
 }
 
-int main(int argc, char* argv[])
-{
-    // --- Inicialización de subsistemas ---
+int main(int argc, char **argv) {
+    gfxInitDefault();
     consoleInit(NULL);
 
-    // romfs contiene el cacert.pem que usa http_client.c para validar TLS
-    Result romfsRc = romfsInit();
+    // Cargar romfs para el cacert.pem
+    Result romfs_res = romfsInit();
 
-    PadState pad;
-    padConfigureInput(1, HidNpadStyleSet_NpadStandard);
-    padInitializeDefault(&pad);
+    char query_buffer[256] = "";
+    char status_message[MAX_RESPONSE_BUFFER] = "Presiona [X] para buscar.\nPresiona [A] para prueba de descarga.";
+    
+    while (appletMainLoop()) {
+        hidScanInput();
+        u64 kDown = hidKeysDown(CONTROLLER_P1_AUTO);
 
-    int netOk = http_client_init();
-    ensure_download_dir();
+        if (kDown & KEY_PLUS) break;
 
-    // --- Estado de UI ---
-    int lastResultShown = 0;
-    HttpDownloadResult lastResult = HTTP_DOWNLOAD_OK;
+        // Buscar con teclado virtual
+        if (kDown & KEY_X) {
+            if (abrir_teclado_virtual(query_buffer, sizeof(query_buffer), "")) {
+                if (strlen(query_buffer) > 0) {
+                    snprintf(status_message, sizeof(status_message), "Buscando: '%s'...", query_buffer);
+                    
+                    // URL de ejemplo. Aquí conectas tu API real luego.
+                    char url[MAX_URL_LENGTH];
+                    snprintf(url, sizeof(url), "https://httpbin.org/get?busqueda=%s", query_buffer);
 
-    printf("\x1b[2J"); // limpia pantalla
-    printf("=================================================\n");
-    printf(" Cliente HTTP - Homebrew NRO (libnx + libcurl)\n");
-    printf("=================================================\n\n");
-
-    if (!netOk) {
-        printf("ERROR: no se pudo inicializar la red/curl.\n");
-    }
-    if (R_FAILED(romfsRc)) {
-        printf("AVISO: romfs no cargado (falta cacert.pem para HTTPS).\n");
-    }
-
-    printf("Destino de descargas: %s\n\n", DOWNLOAD_DIR);
-    printf("Controles:\n");
-    printf("  A  -> Descargar archivo de ejemplo\n");
-    printf("  +  -> Salir\n\n");
-
-    // --- Bucle principal ---
-    while (appletMainLoop())
-    {
-        padUpdate(&pad);
-        u64 kDown = padGetButtonsDown(&pad);
-
-        // Salida limpia con el botón +
-        if (kDown & HidNpadButton_Plus) {
-            break;
-        }
-
-        // Botón A: dispara la descarga
-        if ((kDown & HidNpadButton_A) && netOk) {
-            printf("\nIniciando descarga desde:\n  %s\n\n", DOWNLOAD_URL);
-            consoleUpdate(NULL);
-
-            lastResult = http_download_file(DOWNLOAD_URL, DOWNLOAD_PATH);
-            lastResultShown = 1;
-
-            switch (lastResult) {
-                case HTTP_DOWNLOAD_OK:
-                    printf("Descarga completada y guardada en la SD.\n\n");
-                    break;
-                case HTTP_DOWNLOAD_ERR_FOPEN:
-                    printf("Error: no se pudo crear el archivo en la SD.\n\n");
-                    break;
-                case HTTP_DOWNLOAD_ERR_CURL_INIT:
-                    printf("Error: no se pudo inicializar curl.\n\n");
-                    break;
-                case HTTP_DOWNLOAD_ERR_REQUEST:
-                    printf("Error: fallo en la petición HTTP (revisa conexión/URL).\n\n");
-                    break;
-                case HTTP_DOWNLOAD_ERR_HTTP_STATUS:
-                    printf("Error: el servidor respondió con un código HTTP de error.\n\n");
-                    break;
-                case HTTP_DOWNLOAD_ERR_WRITE_SD:
-                    printf("Error: fallo al escribir en la microSD (¿espacio libre?).\n\n");
-                    break;
+                    char response_buffer[2048]; // Usamos un buffer local para la respuesta HTTP
+                    
+                    if (http_get_string(url, response_buffer, sizeof(response_buffer)) == 0) {
+                        snprintf(status_message, sizeof(status_message), "Exito! Respuesta JSON obtenida:\n%.500s...", response_buffer);
+                    } else {
+                        snprintf(status_message, sizeof(status_message), "Error: Fallo la peticion HTTPS.");
+                    }
+                }
             }
-        } else if ((kDown & HidNpadButton_A) && !netOk) {
-            printf("\nNo hay red disponible, no se puede descargar.\n\n");
         }
 
-        consoleUpdate(NULL);
+        // Dibujar interfaz
+        consoleClear();
+        printf("===================================================\n");
+        printf("       CLIENTE HOMEBREW - BUSCADOR INTERACTIVO     \n");
+        printf("===================================================\n\n");
+
+        if (R_FAILED(romfs_res)) {
+            printf("[AVISO] Romfs no montado. El HTTPS fallara.\n\n");
+        } else {
+            printf("[ESTADO] RomFS activo. Certificados cargados.\n\n");
+        }
+
+        printf("Termino buscado : %s\n", query_buffer[0] != '\0' ? query_buffer : "(Vacio)");
+        printf("---------------------------------------------------\n");
+        printf("Consola de salida:\n\n%s\n", status_message);
+        printf("\n---------------------------------------------------\n");
+        printf(" Controles:\n");
+        printf(" [X] Buscar con teclado\n");
+        printf(" [+] Salir de la app\n");
+        printf("===================================================\n");
+
+        gfxFlushBuffers();
+        gfxSwapBuffers();
+        gputickWaitForVsync();
     }
 
-    // --- Limpieza ordenada ---
-    http_client_exit();
-    if (R_SUCCEEDED(romfsRc)) romfsExit();
-    consoleExit(NULL);
-
+    if (R_SUCCEEDED(romfs_res)) romfsExit();
+    gfxExit();
     return 0;
 }
