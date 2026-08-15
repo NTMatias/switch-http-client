@@ -11,7 +11,12 @@ include $(DEVKITPRO)/libnx/switch_rules
 #---------------------------------------------------------------------------------
 # Opciones generales de la app
 #---------------------------------------------------------------------------------
-TARGET      :=  $(notdir $(CURDIR))
+# Fijamos el nombre explícitamente en vez de derivarlo de $(notdir $(CURDIR)).
+# Si se deriva del nombre de carpeta, el .nro cambia de nombre según cómo
+# se llame el checkout (p. ej. en GitHub Actions, donde la carpeta toma el
+# nombre exacto del repositorio), rompiendo cualquier paso de CI que
+# espere "switch-http-client.nro".
+TARGET      :=  switch-http-client
 BUILD       :=  build
 SOURCES     :=  source
 DATA        :=  data
