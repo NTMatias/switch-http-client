@@ -16,7 +16,6 @@ static size_t WriteMemoryCallback(void *contents, size_t size, size_t nmemb, voi
 
     char *ptr = realloc(mem->memory, mem->size + realsize + 1);
     if(!ptr) {
-        printf("No hay memoria suficiente (realloc devolvió NULL)\n");
         return 0;
     }
 
@@ -52,11 +51,9 @@ int http_get_string(const char *url, char *buffer, size_t max_len) {
     curl_easy_setopt(curl_handle, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
     curl_easy_setopt(curl_handle, CURLOPT_WRITEDATA, (void *)&chunk);
     curl_easy_setopt(curl_handle, CURLOPT_USERAGENT, "SwitchHomebrewClient/1.0");
-    
     curl_easy_setopt(curl_handle, CURLOPT_CAINFO, "romfs:/cacert.pem");
     curl_easy_setopt(curl_handle, CURLOPT_SSL_VERIFYPEER, 1L);
     curl_easy_setopt(curl_handle, CURLOPT_SSL_VERIFYHOST, 2L);
-    
     curl_easy_setopt(curl_handle, CURLOPT_TIMEOUT, 15L);
 
     res = curl_easy_perform(curl_handle);
@@ -93,17 +90,14 @@ int http_download_file(const char *url, const char *filepath) {
     curl_easy_setopt(curl, CURLOPT_URL, url);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteFileCallback);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, fp);
-    
     curl_easy_setopt(curl, CURLOPT_CAINFO, "romfs:/cacert.pem");
     curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L);
     curl_easy_setopt(curl, CURLOPT_USERAGENT, "SwitchHomebrewClient/1.0");
 
-    // SOLUCIÓN: Solo se pasa un argumento a curl_easy_perform
     res = curl_easy_perform(curl); 
     
     fclose(fp);
     curl_easy_cleanup(curl);
 
     return (res == CURLE_OK) ? 0 : -1;
-}
 }
