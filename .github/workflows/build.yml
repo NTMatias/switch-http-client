@@ -13,7 +13,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          dcpman install switch-dev switch-curl switch-mbedtls switch-zlib switch-libnx
+          dgp-pacman -Syu --noconfirm switch-dev switch-curl switch-mbedtls switch-zlib switch-libnx || dkp-pacman -Syu --noconfirm switch-dev switch-curl switch-mbedtls switch-zlib switch-libnx
 
       - name: Build NRO
         run: |
