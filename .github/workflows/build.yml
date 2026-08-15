@@ -5,20 +5,24 @@ on: [push, pull_request]
 jobs:
   build:
     runs-on: ubuntu-latest
-    container: devkitpro/devkita64:latest
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install dependencies
+      - name: Setup devkitPro pacman
+        uses: devkitPro/actions/install@v2
+
+      - name: Install Switch dependencies
         run: |
-          dgp-pacman -Syu --noconfirm switch-dev switch-curl switch-mbedtls switch-zlib switch-libnx || dkp-pacman -Syu --noconfirm switch-dev switch-curl switch-mbedtls switch-zlib switch-libnx
+          dkp-pacman -Syu --noconfirm switch-dev switch-curl switch-mbedtls switch-zlib switch-libnx
 
       - name: Build NRO
         run: |
+          # Carga las variables de entorno de devkitPro y compila
+          . /opt/devkitpro/devkitpro-env.sh
           make
-
+          
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
